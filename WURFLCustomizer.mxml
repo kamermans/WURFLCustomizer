@@ -1,0 +1,283 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:WindowedApplication xmlns:fx="http://ns.adobe.com/mxml/2009" 
+			   xmlns:s="library://ns.adobe.com/flex/spark" 
+			   xmlns:mx="library://ns.adobe.com/flex/mx" preinitialize="onPreInit(event)" applicationComplete="onAppComplete(event)">
+	<fx:Style source="support/style.css"/>
+	<fx:Script>
+		<![CDATA[
+			import flash.events.Event;
+			import flash.events.IOErrorEvent;
+			import flash.net.FileFilter;
+			import flash.net.FileReference;
+			import flash.utils.ByteArray;
+			
+			import mx.collections.ArrayCollection;
+			import mx.collections.XMLListCollection;
+			import mx.controls.Alert;
+			import mx.events.DragEvent;
+			import mx.managers.CursorManager;
+			import mx.managers.DragManager;
+			import mx.managers.PopUpManager;
+			
+			import org.osmf.events.TimeEvent;
+			
+			import spark.components.supportClasses.Skin;
+			
+			import support.CapFilterWindow;
+			import support.ExportingWURFLWindow;
+			import support.FormatBytes;
+			import support.WURFLSchemaTree;
+			
+			//FileReference Class well will use to load data
+			private var fr:FileReference;
+			private var xmldata:XML;
+			[Bindable]
+			private var wurflLoaded:Boolean = false;
+			[Bindable]
+			private var capabilityList:XMLListCollection;
+			private var groups:XML;
+			[Bindable]
+			private var WURFLTree:WURFLSchemaTree;
+			[Bindable]
+			private var customWURFLCapabilities:XMLListCollection;
+			private var loadedWURFL:XML;
+			private var numDevices:uint;
+			
+			private var exportingWindow:ExportingWURFLWindow;
+			private var exportFile:File;
+			private var exportData:XML = <wurfl><devices/></wurfl>;
+			private var pendingDevices:Array = [];
+			private var capLookup:Array = [];
+			
+			//File types which we want the user to open
+			private static const FILE_TYPES:Array = [new FileFilter("WURFL File (*.xml)", "*.xml"), new FileFilter("All Files (*.*)", "*.*")];
+			
+			private function onPreInit(e:Event):void{
+				WURFLTree = new WURFLSchemaTree();
+				var xml:XML = <groups/>;
+				customWURFLCapabilities = new XMLListCollection(xml.group);
+			}
+			private function onAppComplete(e:Event):void{
+				this.status = "Load the source WURFL file to get started!";
+			}
+			private function onLoadFileClick():void{
+				fr = new FileReference();
+				fr.addEventListener(Event.SELECT, onFileSelect);
+				fr.addEventListener(Event.CANCEL,onCancel);
+				fr.browse(FILE_TYPES);
+			}
+			private function onFileSelect(e:Event):void{
+				this.status = "Loading source WURFL File...";
+				fr.addEventListener(Event.COMPLETE, onLoadComplete);
+				fr.addEventListener(IOErrorEvent.IO_ERROR, onLoadError);
+				fr.load();
+			}
+			private function onCancel(e:Event):void{
+				this.status = "Load source WURFL file cancelled.";
+				fr = null;
+			}
+			private function onLoadComplete(e:Event):void{
+//				var file:File = e.target as File;
+				var data:ByteArray = fr.data;
+//				filename.text = file.nativePath;
+				loadedWURFL = new XML(data);
+				wurflLoaded = true;
+				this.status = "Source WURFL file loaded ("+fr.name+", "+FormatBytes.format(fr.size)+")";
+				fr = null;
+			}
+			private function createTreeFromWURFL(data:ByteArray):void{
+				CursorManager.setBusyCursor();
+				xmldata = new XML(data);
+				groups = <grouplist/>;
+				var groupsXML:XMLList = xmldata..group;
+				for each(var group:XML in groupsXML){
+					var group_name:String = group.@id;
+					if(groups.group.(@data == group_name).length() == 0){
+						trace("Added group "+group_name);
+						var newNode:XML = <group/>;
+						newNode.@label = group_name;
+						newNode.@data = group_name;
+						groups.appendChild(newNode);
+					}
+					for each(var capability:XML in group..capability){
+						var capability_name:String = capability.@name;
+						if(groups.group.(@data == group_name).capability.(@data == capability_name).length() == 0){
+							var newCap:XML = <capability/>;
+							newCap.@label = capability_name;
+							newCap.@data = capability_name;
+							groups.group.(@data == group_name).appendChild(newCap);
+							trace("Added cap "+capability.@name+" to "+group.@id);
+						}
+					}
+				}
+				capabilityList = new XMLListCollection(groups.group);
+				CursorManager.removeBusyCursor();
+			}
+			private function onClickSave():void{
+				var startDir:File = File.documentsDirectory;
+				startDir.browseForSave("Save Custom WURFL As");
+				startDir.addEventListener(Event.SELECT, saveData);
+			}
+			private function saveData(event:Event):void{
+				exportFile = event.target as File;
+				exportingWindow = new ExportingWURFLWindow();
+				PopUpManager.addPopUp(exportingWindow,this,true);
+				PopUpManager.centerPopUp(exportingWindow);
+				CursorManager.setBusyCursor();
+				createCapLookup();
+				var i:uint = 0;
+				exportingWindow.progress.setProgress(0,numDevices);
+				for each(var device:XML in loadedWURFL.devices.device){
+					pendingDevices.push(device);
+				}
+				numDevices = pendingDevices.length;
+				var timer:Timer = new Timer(1,0);
+				timer.addEventListener(TimerEvent.TIMER,exportNextDevice);
+				timer.start();
+			}
+			private function exportNextDevice(event:TimerEvent):void{
+				exportingWindow.progress.setProgress(numDevices - pendingDevices.length, numDevices);
+				if(pendingDevices.length == 0){
+					(event.target as Timer).stop();
+					CursorManager.removeBusyCursor();
+					exportWURFLToFile();
+					PopUpManager.removePopUp(exportingWindow);
+					Alert.show("Finished exporting custom WURFL file:\n"+exportFile.nativePath+"\nSize: "+FormatBytes.format(exportFile.size),"Finished Exporting WURFL");
+				}else{
+					var iteration:uint = 0;
+					while(iteration++ < 100 && pendingDevices.length){
+						var device:XML = pendingDevices.pop() as XML;
+						var newDevice:XML = <device/>;
+						newDevice.@id = device.@id;
+						newDevice.@user_agent = device.@user_agent;
+						newDevice.@fall_back = device.@fall_back;
+						if(String(device.@actual_device_root).length > 0){
+							newDevice.@actual_device_root = device.@actual_device_root;
+						}
+						for each(var group:XML in device.group){
+							//if(includeCap(group.@id)){
+								// Include the entire group.  Easy, just .copy() the XML from the original WURFL group
+							//	newDevice.appendChild(group.copy());
+							//}else{
+								var addedGroup:Boolean = false;
+								var currentGroup:XML;
+								for each(var cap:XML in group.capability){
+									if(includeCap(cap.@name)){
+										// Include this individual capability
+										if(!addedGroup){
+											// The individual capability must be under a group heading, so create it if it doesn't already exist
+											var newGroup:XML = <group/>;
+											newGroup.@id = group.@id;
+											newDevice.appendChild(newGroup);
+											addedGroup = true;
+										}
+										newDevice.group.(@id == group.@id).appendChild(cap.copy());
+									}
+								}
+							//}
+						}
+						exportData.devices.appendChild(newDevice);
+					}
+				}
+			}
+			private function exportWURFLToFile():void{
+				// FileStream for writing the file
+				var fileStream:FileStream = new FileStream();
+				// Open the file in write mode
+				fileStream.open(exportFile, FileMode.WRITE);
+				// Write the ArrayCollection object to the file
+				fileStream.writeUTFBytes(exportData.toXMLString());
+				// Close FileStream
+				fileStream.close();
+			}
+			private function createCapLookup():void{
+				capLookup = [];
+				for each(var cap:XML in customWURFLCapabilities.source){
+					if(cap.name() == "group"){
+						for each(var realcap:XML in cap..capability){
+							capLookup.push(realcap.@data.toString());
+						}
+					}else{
+						capLookup.push(cap.@data.toString());
+					}
+				}
+			}
+			private function includeCap(cap:String):Boolean{
+/*				for(var i:uint=0;i<capLookup.length;i++){
+					
+					if(capLookup[i]==cap) return true;
+				}
+				return false;
+*/				return (capLookup.indexOf(cap) != -1);
+			}
+			private function onLoadError(e:IOErrorEvent):void{
+				trace("Error loading file : " + e.text);
+			}
+			private function deleteCap():void{
+				var i:uint = 0;
+				for each(var item:XML in customWURFLListControl.selectedItems){
+						for(var a:uint=0;a<customWURFLCapabilities.source.length();a++){
+							var node:XML = XML(customWURFLCapabilities.source[a]);
+							if(node.@data == item.@data){
+								trace("deleting root capability/group: "+node.@data);
+								customWURFLCapabilities.removeItemAt(a);
+							}else{
+								if(node.name() == "group"){
+									trace("deleting capability "+item.@data+" from "+node.@data);
+									delete node.capability.(@data == item.@data)[0];
+								}else{
+									trace("Nothing found in tree");
+								}
+							}
+						}
+					i++;
+				}
+			}
+			private function getCapFilter():void{
+				createCapLookup();
+				var capFilterWindow:CapFilterWindow = new CapFilterWindow();
+				PopUpManager.addPopUp(capFilterWindow,this,true);
+				PopUpManager.centerPopUp(capFilterWindow);
+				capFilterWindow.code.text = "\tpublic static $CAPABILITY_FILTER = array(\n";
+				for(var i:uint=0;i<capLookup.length;i++){
+					capFilterWindow.code.text += "\t\t\""+capLookup[i]+"\",\n";
+				}
+				capFilterWindow.code.text += "\t);\n";
+			}
+			/**
+			 * Drag and Drop Event Handlers
+			 */
+			private function dragCapComplete(event:DragEvent):void{
+				if(customWURFLCapabilities.contains(event.draggedItem)){
+					event.preventDefault();
+				}
+			}
+		]]>
+	</fx:Script>
+
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<s:BorderContainer left="0" right="0" top="0" height="43">
+		<s:Button label="Load WURFL File" click="onLoadFileClick();" id="btnOpen" left="10" top="10"/>
+		<s:Button click="onClickSave();" label="Save Custom WURFL" id="btnSave" right="10" top="10" enabled="{wurflLoaded}"/>
+		<mx:LinkButton label="Generate Tera-WURFL $CAPABILITY_FILTER" click="getCapFilter();" right="139" top="12"/>
+	</s:BorderContainer>
+	<s:VGroup width="100%" height="100%" top="42" x="0" paddingLeft="10" paddingRight="10" paddingBottom="10">
+		<s:Label text="Drag and drop the groups and capabilities that you want to include in your WURFL file" width="100%" fontSize="16" fontWeight="bold" textAlign="center" paddingTop="5" paddingBottom="5"/>
+		<s:HGroup width="100%" height="100%">
+			<s:VGroup height="100%" width="100%">
+				<s:Label text="Available WURFL Capabilities" width="100%" height="20" textAlign="center" paddingTop="5" fontWeight="normal" fontSize="18" paddingBottom="5"/>
+				<mx:Tree id="WURFLTreeControl" dataProvider="{WURFLTree.schema}" allowMultipleSelection="true" labelField="@data" dragEnabled="true" dragMoveEnabled="false" top="30" width="100%" height="100%"/>
+			</s:VGroup>
+			<s:VGroup height="100%" width="100%" horizontalAlign="center">
+				<s:Label text="Your Custom WURFL Capabilities" width="100%" height="20" textAlign="center" paddingTop="5" fontWeight="normal" fontSize="18" paddingBottom="5"/>
+				<mx:Tree id="customWURFLListControl" dataProvider="{customWURFLCapabilities}" allowMultipleSelection="true" labelField="@data" dropEnabled="true" dragComplete="dragCapComplete(event)" top="30" width="100%" height="100%" />
+				<s:HGroup width="100%" horizontalAlign="center">
+					<s:Button id="btnRemoveCap" label="Remove Group / Capability" enabled="{customWURFLListControl.selectedIndices.length > 0}" click="deleteCap();" />
+					<s:Button id="btnRemoveAllCaps" label="Remove All Groups / Capabilities" enabled="{customWURFLCapabilities.length > 0}" click="customWURFLCapabilities.removeAll();" />
+				</s:HGroup>
+			</s:VGroup>
+		</s:HGroup>
+	</s:VGroup>
+</s:WindowedApplication>
