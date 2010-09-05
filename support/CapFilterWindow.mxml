@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:fx="http://ns.adobe.com/mxml/2009" 
+			   xmlns:s="library://ns.adobe.com/flex/spark" 
+			   xmlns:mx="library://ns.adobe.com/flex/mx" width="400" height="470" cornerRadius="10" title="Tera-WURFL Capability Filter" creationComplete="init();">
+	<s:layout>
+		<s:BasicLayout/>
+	</s:layout>
+	<fx:Script>
+		<![CDATA[
+			import mx.events.CloseEvent;
+			import mx.managers.PopUpManager;
+			
+			private function init():void{
+				this.addEventListener(CloseEvent.CLOSE,closeWindow);
+			}
+			private function closeWindow(e:Event):void{
+				PopUpManager.removePopUp(this);
+			}
+			private function copyToClipboard(e:Event):void{
+				Clipboard.generalClipboard.clear();
+				Clipboard.generalClipboard.setData(ClipboardFormats.TEXT_FORMAT,code.text);
+			}
+		]]>
+	</fx:Script>
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<s:Label text="Put this CAPABILITY_FILTER definition in your TeraWurflConfig.php file to make Tera-WURFL store only the capabilities you chose.&#xd;" x="14" y="12" width="374" height="28"/>
+	<s:TextArea x="10" y="41" width="378" height="359" id="code" editable="false" fontFamily="Courier New" fontSize="11"/>
+	<mx:LinkButton x="278" y="406" label="Copy to Clipboard" click="copyToClipboard(event);" width="110"/>
+</s:TitleWindow>

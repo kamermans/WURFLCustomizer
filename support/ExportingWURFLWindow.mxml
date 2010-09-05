@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:fx="http://ns.adobe.com/mxml/2009" 
+			   xmlns:s="library://ns.adobe.com/flex/spark" 
+			   xmlns:mx="library://ns.adobe.com/flex/mx" width="570" height="166" cornerRadius="10" title="Exporting WURFL File" skinClass="support.ExportingWURFLWindowSkin">
+	<s:controlBarContent>
+	
+	</s:controlBarContent>
+	<mx:ProgressBar id="progress" mode="manual" label="Exporting Custom WURFL %3%%" width="95%" y="75" horizontalCenter="0"/>
+	<mx:Text  x="10" y="10" width="547" height="70" selectable="false">
+		<mx:htmlText>
+			<![CDATA[<b>Please wait while your custom WURFL file is being created.</b>
+This process can take up to a few minutes, so now is a great time to take a look at the 
+latest news at <a href="http://www.Tera-WURFL.com">http://www.Tera-WURFL.com</a>]]>
+		</mx:htmlText>
+	</mx:Text>
+</s:TitleWindow>

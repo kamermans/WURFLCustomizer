@@ -1,0 +1,17 @@
+/* CSS file */
+@namespace s "library://ns.adobe.com/flex/spark";
+@namespace mx "library://ns.adobe.com/flex/mx";
+
+s|WindowedApplication {
+	skinClass: ClassReference("spark.skins.spark.SparkChromeWindowedApplicationSkin");
+	cornerRadius: 10;
+	drop-shadow-visible: true;
+/*	background-color: #999999; 
+	background-alpha: 0.9; */
+} 
+
+s|BorderContainer {
+	contentBackgroundAlpha: 0.0;
+	backgroundAlpha: 0;
+	border-visible: false;
+}
