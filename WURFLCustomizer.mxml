@@ -45,7 +45,7 @@
 			
 			private var exportingWindow:ExportingWURFLWindow;
 			private var exportFile:File;
-			private var exportData:XML = <wurfl><devices/></wurfl>;
+			private var exportData:XML = <wurfl><version/><devices/></wurfl>;
 			private var pendingDevices:Array = [];
 			private var capLookup:Array = [];
 			
@@ -131,6 +131,8 @@
 					pendingDevices.push(device);
 				}
 				numDevices = pendingDevices.length;
+				exportData.version.appendChild(loadedWURFL.version.ver);
+				exportData.version.appendChild(loadedWURFL.version.last_updated);
 				var timer:Timer = new Timer(1,0);
 				timer.addEventListener(TimerEvent.TIMER,exportNextDevice);
 				timer.start();
