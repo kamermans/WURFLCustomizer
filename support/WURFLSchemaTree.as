@@ -600,5 +600,26 @@ package support{
 		public function WURFLSchemaTree():void{
 			schema = new XMLListCollection(schemaXML.group);
 		}
+		
+		public function setFromWURFL(data:XML):void {
+			schemaXML = <groups></groups>;
+			var generic:XML;
+			if (data.devices.device[0].attribute('id').toString() == 'generic') {
+				// The generic device is almost always the first device node
+				generic = data.devices.device[0];
+			} else {
+				generic = data.devices.device.(@id == 'generic')[0];
+			}
+			for each (var group:XML in generic.group) {
+				var group_id:String = group.attribute('id').toString();
+				var new_group:XML = <group data={group_id}></group>;
+				for each (var cap:XML in group.capability) {
+					var cap_name:String = cap.attribute('name').toString();
+					new_group.appendChild(<capability data={cap_name}/>);
+				}
+				schemaXML.appendChild(new_group);
+			}
+			schema = new XMLListCollection(schemaXML.group);
+		}
 	}
 }

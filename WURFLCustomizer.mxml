@@ -77,10 +77,9 @@
 				fr = null;
 			}
 			private function onLoadComplete(e:Event):void{
-//				var file:File = e.target as File;
 				var data:ByteArray = fr.data;
-//				filename.text = file.nativePath;
 				loadedWURFL = new XML(data);
+				WURFLTree.setFromWURFL(loadedWURFL);
 				wurflLoaded = true;
 				this.status = "Source WURFL file loaded ("+fr.name+", "+FormatBytes.format(fr.size)+")";
 				fr = null;
@@ -131,8 +130,7 @@
 					pendingDevices.push(device);
 				}
 				numDevices = pendingDevices.length;
-				exportData.version.appendChild(loadedWURFL.version.ver);
-				exportData.version.appendChild(loadedWURFL.version.last_updated);
+				exportData.version = loadedWURFL.version;
 				var timer:Timer = new Timer(1,0);
 				timer.addEventListener(TimerEvent.TIMER,exportNextDevice);
 				timer.start();
